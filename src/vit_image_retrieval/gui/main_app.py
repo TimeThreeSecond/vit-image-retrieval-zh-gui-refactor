@@ -29,13 +29,14 @@ from PyQt5.QtWidgets import (
     QFrame,
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QKeySequence
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QFontMetrics
 from PyQt5.QtWidgets import QShortcut
 
 from vit_image_retrieval.core.feature_extractor import ImageFeatureExtractor
 from vit_image_retrieval.core.retrieval_system import ImageRetrievalSystem
 from vit_image_retrieval.core.image_display import EnhancedImageDisplay
 from vit_image_retrieval.gui.theme import LIGHT
+from vit_image_retrieval.gui.i18n import t, toggle_lang
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,7 @@ class FeatureExtractionTab(QWidget):
     def __init__(self, model_dir=None, theme=None):
         super().__init__()
         self._theme = theme or LIGHT
+        self._lang = self._theme.language if hasattr(self._theme, 'language') else "en"
         self.model_dir = model_dir
         self.retrieval_system = ImageRetrievalSystem(
             feature_extractor=ImageFeatureExtractor(model_dir=model_dir)
@@ -171,6 +173,19 @@ class FeatureExtractionTab(QWidget):
         self.worker = None
         self._setup_ui()
         self._apply_theme()
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        """Refresh all UI text according to current language."""
+        lang = self._lang
+        self.title.setText(t("fe_title", lang))
+        self.desc.setText(t("fe_desc", lang))
+        self.dir_label.setText(t("fe_dir_label", lang))
+        self.dir_path_label.setText(t("fe_no_dir", lang))
+        self.select_dir_btn.setText(t("fe_browse", lang))
+        self.name_label.setText(t("fe_index_name", lang))
+        self.index_name_input.setPlaceholderText(t("fe_index_placeholder", lang))
+        self.extract_btn.setText(t("fe_extract_btn", lang))
 
     def _setup_ui(self):
         layout = QVBoxLayout()
@@ -178,16 +193,14 @@ class FeatureExtractionTab(QWidget):
         layout.setContentsMargins(18, 18, 18, 18)
 
         # Title
-        title = QLabel("Feature Extraction")
-        title.setStyleSheet(self._theme.label_style(bold=True, size=self._theme.font_xl))
-        layout.addWidget(title)
+        self.title = QLabel()
+        self.title.setStyleSheet(self._theme.label_style(bold=True, size=self._theme.font_xl))
+        layout.addWidget(self.title)
 
-        desc = QLabel(
-            "Select a folder of images to extract ViT features and build a search index."
-        )
-        desc.setWordWrap(True)
-        desc.setStyleSheet(self._theme.label_style(size=self._theme.font_md))
-        layout.addWidget(desc)
+        self.desc = QLabel()
+        self.desc.setWordWrap(True)
+        self.desc.setStyleSheet(self._theme.label_style(size=self._theme.font_md))
+        layout.addWidget(self.desc)
 
         # ── Directory selection ──
         dir_frame = QFrame()
@@ -196,15 +209,16 @@ class FeatureExtractionTab(QWidget):
         dir_layout.setSpacing(16)
         dir_layout.setContentsMargins(18, 18, 18, 18)
 
-        dir_label = self._make_label("Image Directory", bold=True)
-        dir_layout.addWidget(dir_label)
+        self.dir_label = self._make_label("")
+        self.dir_label.setStyleSheet(self._theme.label_style(bold=True))
+        dir_layout.addWidget(self.dir_label)
 
         dir_row = QHBoxLayout()
-        self.dir_path_label = QLabel("No directory selected")
+        self.dir_path_label = QLabel()
         self.dir_path_label.setStyleSheet(self._theme.info_panel_style())
         self.dir_path_label.setWordWrap(True)
 
-        self.select_dir_btn = QPushButton("Browse...")
+        self.select_dir_btn = QPushButton()
         self.select_dir_btn.setStyleSheet(self._theme.secondary_btn())
         self.select_dir_btn.setMinimumWidth(120)
         self.select_dir_btn.clicked.connect(self._select_directory)
@@ -215,9 +229,9 @@ class FeatureExtractionTab(QWidget):
 
         # ── Index name ──
         name_row = QHBoxLayout()
-        name_row.addWidget(self._make_label("Index Name (optional):"))
+        self.name_label = self._make_label("")
+        name_row.addWidget(self.name_label)
         self.index_name_input = QLineEdit()
-        self.index_name_input.setPlaceholderText("e.g., animals, cars, vacation")
         self.index_name_input.setStyleSheet(self._theme.input_style())
         name_row.addWidget(self.index_name_input, stretch=1)
         dir_layout.addLayout(name_row)
@@ -296,7 +310,8 @@ class FeatureExtractionTab(QWidget):
 
     def _start_extraction(self):
         if not self.selected_dir:
-            QMessageBox.warning(self, "Warning", "Please select a directory first.")
+            QMessageBox.warning(self, t("warning", self._lang),
+                                t("fe_warning_no_dir", self._lang))
             return
 
         self.extract_btn.setEnabled(False)
@@ -329,10 +344,10 @@ class FeatureExtractionTab(QWidget):
         self.progress_bar.setValue(value)
 
     def _extraction_finished(self):
+        lang = self._lang
         self.progress_bar.setVisible(False)
-        self.status_label.setText(
-            f"Done! Index: {self.worker.index_path}  |  Metadata: {self.worker.metadata_path}"
-        )
+        done_text = t("fe_done", lang, index=self.worker.index_path, meta=self.worker.metadata_path)
+        self.status_label.setText(done_text)
         self.status_label.setStyleSheet(
             f"font-size: {self._theme.font_sm}; color: {self._theme.success};"
         )
@@ -341,15 +356,14 @@ class FeatureExtractionTab(QWidget):
         self.extract_btn.setStyleSheet(self._theme.primary_btn())
         self.select_dir_btn.setEnabled(True)
         QMessageBox.information(
-            self, "Success",
-            f"Feature extraction completed!\n\n"
-            f"Index:   {self.worker.index_path}\n"
-            f"Metadata: {self.worker.metadata_path}"
+            self, t("fe_success_title", lang),
+            t("fe_success_msg", lang, index=self.worker.index_path, meta=self.worker.metadata_path)
         )
 
     def _extraction_error(self, error_msg: str):
+        lang = self._lang
         self.progress_bar.setVisible(False)
-        self.status_label.setText(f"Error: {error_msg}")
+        self.status_label.setText(t("fe_error_msg", lang, error=error_msg))
         self.status_label.setStyleSheet(
             f"font-size: {self._theme.font_sm}; color: {self._theme.danger};"
         )
@@ -357,7 +371,8 @@ class FeatureExtractionTab(QWidget):
         self.extract_btn.setEnabled(True)
         self.extract_btn.setStyleSheet(self._theme.primary_btn())
         self.select_dir_btn.setEnabled(True)
-        QMessageBox.critical(self, "Error", f"Feature extraction failed:\n{error_msg}")
+        QMessageBox.critical(self, t("fe_error_title", lang),
+                             t("fe_error_msg", lang, error=error_msg))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -368,6 +383,7 @@ class RetrievalTab(QWidget):
     def __init__(self, model_dir=None, theme=None):
         super().__init__()
         self._theme = theme or LIGHT
+        self._lang = self._theme.language if hasattr(self._theme, 'language') else "en"
         self.model_dir = model_dir
         self.retrieval_system: Optional[ImageRetrievalSystem] = None
         self.query_image_path: Optional[str] = None
@@ -377,7 +393,38 @@ class RetrievalTab(QWidget):
         self._setup_ui()
         self._apply_theme()
         self._register_shortcuts()
+        self.retranslate_ui()
         self.try_load_latest_index()
+
+    def retranslate_ui(self):
+        """Refresh all visible text according to current language."""
+        lang = self._lang
+        # Index section
+        self.idx_title.setText(t("rt_index_section", lang))
+        self.current_index_label.setText(t("rt_no_index", lang))
+        self.load_latest_btn.setText(t("rt_latest_btn", lang))
+        self.load_latest_btn.setToolTip(t("rt_latest_tip", lang))
+        self.load_specific_btn.setText(t("rt_load_btn", lang))
+        self.load_specific_btn.setToolTip(t("rt_load_tip", lang))
+        # Query section
+        self.q_title.setText(t("rt_query_section", lang))
+        qt = self.query_image_path
+        if qt:
+            self.drop_target.setText(t("rt_selected", lang, name=os.path.basename(qt)))
+            self.query_label.setText(os.path.basename(qt))
+        else:
+            self.drop_target.setText(t("rt_drop_hint", lang))
+            self.query_label.setText(t("rt_no_query", lang))
+        self.select_query_btn.setText(t("rt_query_browse", lang))
+        self.select_query_btn.setToolTip(t("rt_query_tip", lang))
+        # Search controls
+        self.topk_label.setText(t("rt_topk", lang))
+        self.search_btn.setText(t("rt_search_btn", lang))
+        self.search_btn.setToolTip(t("rt_search_tip", lang))
+        self.shortcut_hint.setText(t("rt_shortcuts", lang))
+        # Results placeholder
+        self._results_placeholder.setText(t("rt_no_search_yet", lang))
+        self.results_title.setText(t("rt_similarity", lang))
 
     # ─── UI Setup ────────────────────────────────────────────
 
@@ -394,7 +441,9 @@ class RetrievalTab(QWidget):
         idx_layout.setContentsMargins(18, 18, 18, 18)
 
         idx_header = QHBoxLayout()
-        idx_header.addWidget(self._make_label("Search Index", bold=True))
+        self.idx_title = self._make_label("")
+        self.idx_title.setStyleSheet(self._theme.label_style(bold=True))
+        idx_header.addWidget(self.idx_title)
         idx_header.addStretch()
         idx_layout.addLayout(idx_header)
 
@@ -426,13 +475,13 @@ class RetrievalTab(QWidget):
         q_layout.setContentsMargins(18, 18, 18, 18)
 
         q_header = QHBoxLayout()
-        q_header.addWidget(self._make_label("Query Image", bold=True))
+        self.q_title = self._make_label("")
+        self.q_title.setStyleSheet(self._theme.label_style(bold=True))
+        q_header.addWidget(self.q_title)
         q_layout.addLayout(q_header)
 
         # Drop target
-        self.drop_target = DropTargetLabel(
-            "Drag & drop an image here\nor click Browse to select", self._theme
-        )
+        self.drop_target = DropTargetLabel("", self._theme)
         self.drop_target.fileDropped.connect(self._on_image_dropped)
         q_layout.addWidget(self.drop_target)
 
@@ -442,9 +491,9 @@ class RetrievalTab(QWidget):
         self.query_label.setStyleSheet(self._theme.info_panel_style())
         browse_row.addWidget(self.query_label, stretch=1)
 
-        self.select_query_btn = QPushButton("Browse...")
+        self.select_query_btn = QPushButton()
         self.select_query_btn.setStyleSheet(self._theme.secondary_btn())
-        self.select_query_btn.setToolTip("Select a query image from your filesystem")
+        self.select_query_btn.setToolTip("")
         self.select_query_btn.clicked.connect(self._select_query_image)
         browse_row.addWidget(self.select_query_btn)
         q_layout.addLayout(browse_row)
@@ -454,7 +503,8 @@ class RetrievalTab(QWidget):
         ctrl_layout = QHBoxLayout()
         ctrl_layout.setSpacing(14)
 
-        ctrl_layout.addWidget(self._make_label("Top-K results:"))
+        self.topk_label = self._make_label("")
+        ctrl_layout.addWidget(self.topk_label)
         self.num_results_spin = QSpinBox()
         self.num_results_spin.setRange(1, 50)
         self.num_results_spin.setValue(5)
@@ -463,32 +513,31 @@ class RetrievalTab(QWidget):
         ctrl_layout.addWidget(self.num_results_spin)
         ctrl_layout.addSpacing(24)
 
-        self.search_btn = QPushButton("Search")
+        self.search_btn = QPushButton()
         self.search_btn.setStyleSheet(self._theme.primary_btn(disabled=True))
         self.search_btn.setEnabled(False)
         self.search_btn.setMinimumHeight(52)
         self.search_btn.setMinimumWidth(160)
-        self.search_btn.setToolTip(
-            "Requires: (1) a loaded index, (2) a selected query image"
-        )
+        self.search_btn.setToolTip("")
         self.search_btn.clicked.connect(self._perform_search)
         ctrl_layout.addWidget(self.search_btn)
         ctrl_layout.addStretch()
         layout.addLayout(ctrl_layout)
 
         # Keyboard hint
-        hint = QLabel("Shortcuts:  Ctrl+O = Open image  |  Ctrl+Enter = Search  |  Ctrl+L = Load index")
-        hint.setStyleSheet(f"font-size: {self._theme.font_xs}; color: {self._theme.text_muted};")
-        layout.addWidget(hint)
+        self.shortcut_hint = QLabel()
+        self.shortcut_hint.setStyleSheet(
+            f"font-size: {self._theme.font_xs}; color: {self._theme.text_muted};"
+        )
+        layout.addWidget(self.shortcut_hint)
 
         # ═══ Results area ═══
-        layout.addWidget(self._make_label("Results", bold=True))
+        self.results_title = self._make_label("")
+        self.results_title.setStyleSheet(self._theme.label_style(bold=True))
+        layout.addWidget(self.results_title)
 
         # Results placeholder (shown before any search)
-        self._results_placeholder = QLabel(
-            "No search performed yet.\n"
-            "Select a query image and load an index, then click Search."
-        )
+        self._results_placeholder = QLabel()
         self._results_placeholder.setAlignment(Qt.AlignCenter)
         self._results_placeholder.setStyleSheet(f"""
             QLabel {{
@@ -560,7 +609,7 @@ class RetrievalTab(QWidget):
     def _set_query_image(self, path: str):
         self.query_image_path = path
         self.query_label.setText(os.path.basename(path))
-        self.drop_target.setText(f"Selected: {os.path.basename(path)}")
+        self.drop_target.setText(t("rt_selected", self._lang, name=os.path.basename(path)))
         self.drop_target.setStyleSheet(f"""
             QLabel {{
                 background: {self._theme.success_light};
@@ -585,13 +634,8 @@ class RetrievalTab(QWidget):
             faiss_files = list(cwd.glob("*.faiss"))
             json_files = list(cwd.glob("*.json"))
             if not faiss_files or not json_files:
-                self.current_index_label.setText(
-                    "No index files found  —  go to Feature Extraction tab to build one"
-                )
-                self.current_index_label.setToolTip(
-                    "Switch to the 'Feature Extraction' tab, select an image folder, "
-                    "and click 'Extract Features' to create your first index."
-                )
+                self.current_index_label.setText(t("rt_no_index_guide", self._lang))
+                self.current_index_label.setToolTip(t("rt_no_index_tip", self._lang))
                 return False
 
             latest_idx = max(faiss_files, key=lambda f: f.stat().st_mtime)
@@ -599,7 +643,7 @@ class RetrievalTab(QWidget):
             return self._load_index(str(latest_idx), str(latest_meta))
         except Exception as e:
             logger.error(f"Auto-load index error: {e}")
-            self.current_index_label.setText("Error loading latest index")
+            self.current_index_label.setText(t("rt_load_error", self._lang, error=str(e))[:60])
             return False
 
     def _load_specific_index(self):
@@ -626,24 +670,30 @@ class RetrievalTab(QWidget):
             )
             name = os.path.basename(idx_path)
             count = self.retrieval_system.index.ntotal
-            self.current_index_label.setText(f"{name}  ({count} images)")
+            self.current_index_label.setText(
+                t("rt_index_loaded", self._lang, name=name, count=count)
+            )
             self.search_btn.setEnabled(bool(self.query_image_path))
             if self.query_image_path:
                 self.search_btn.setStyleSheet(self._theme.primary_btn())
             return True
         except Exception as e:
             logger.error(f"Load index error: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load index:\n{str(e)}")
+            QMessageBox.critical(
+                self, t("rt_load_error_title", self._lang),
+                t("rt_load_error", self._lang, error=str(e))
+            )
             return False
 
     # ─── Search ─────────────────────────────────────────────
 
     def _perform_search(self):
+        lang = self._lang
         if not self.query_image_path:
-            QMessageBox.warning(self, "Warning", "Please select a query image first.")
+            QMessageBox.warning(self, t("warning", lang), t("rt_warning_no_query", lang))
             return
         if not self.retrieval_system:
-            QMessageBox.warning(self, "Warning", "Please load an index first.")
+            QMessageBox.warning(self, t("warning", lang), t("rt_warning_no_index", lang))
             return
 
         self._show_loading(True)
@@ -656,22 +706,27 @@ class RetrievalTab(QWidget):
             results = self.retrieval_system.search(self.query_image_path, k=k)
             self._display_results(results)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Search failed:\n{str(e)}")
+            QMessageBox.critical(
+                self, t("error", self._lang),
+                t("rt_search_error", self._lang, error=str(e))
+            )
         finally:
             self._show_loading(False)
 
     def _show_loading(self, visible: bool):
+        searching = t("rt_searching", self._lang)
+        search_btn = t("rt_search_btn", self._lang)
         if visible:
             if not self._overlay:
-                self._overlay = LoadingOverlay(self.results_scroll, "Searching...")
-            self._overlay.show_with("Searching...")
+                self._overlay = LoadingOverlay(self.results_scroll, searching)
+            self._overlay.show_with(searching)
             self.search_btn.setEnabled(False)
-            self.search_btn.setText("Searching...")
+            self.search_btn.setText(searching)
         else:
             if self._overlay:
                 self._overlay.hide()
             self.search_btn.setEnabled(True)
-            self.search_btn.setText("Search")
+            self.search_btn.setText(search_btn)
             if self.retrieval_system and self.query_image_path:
                 self.search_btn.setStyleSheet(self._theme.primary_btn())
 
@@ -690,7 +745,7 @@ class RetrievalTab(QWidget):
                 item.widget().setParent(None)
 
         if not results:
-            empty = QLabel("No results returned.")
+            empty = QLabel(t("rt_no_results", self._lang))
             empty.setAlignment(Qt.AlignCenter)
             empty.setStyleSheet(
                 f"color: {self._theme.text_muted}; font-size: {self._theme.font_lg};"
@@ -747,10 +802,13 @@ class RetrievalTab(QWidget):
 
         # Info
         sim_pct = int(similarity * 100)
+        sim_lbl = t("rt_similarity", self._lang)
+        dist_lbl = t("rt_distance", self._lang)
+        file_lbl = t("rt_file", self._lang)
         info = (
-            f"Similarity: {similarity:.3f}  ({sim_pct}%)\n"
-            f"Distance: {metadata.get('distance', 0):.3f}\n"
-            f"{os.path.basename(path)}"
+            f"{sim_lbl}: {similarity:.3f}  ({sim_pct}%)\n"
+            f"{dist_lbl}: {metadata.get('distance', 0):.3f}\n"
+            f"{file_lbl}: {os.path.basename(path)}"
         )
         info_lbl = QLabel(info)
         info_lbl.setAlignment(Qt.AlignCenter)
@@ -776,30 +834,32 @@ class MainWindow(QMainWindow):
     def __init__(self, theme=None):
         super().__init__()
         self._theme = theme or LIGHT
+        self._lang = "en"
         self.model_dir = self._resolve_model_dir()
 
-        self.setWindowTitle("ViT Image Retrieval System")
+        self.setWindowTitle(t("window_title", self._lang))
         self.setMinimumSize(900, 650)
 
-        # Apply base theme
-        self.setStyleSheet(f"""
-            QMainWindow {{ background: {self._theme.bg_primary}; }}
+        # ── Tab widget ──
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet(f"""
             QTabWidget::pane {{
                 border: none;
                 background: {self._theme.bg_primary};
             }}
             QTabBar {{
-                min-height: 52px;
+                min-height: 64px;
+                max-height: 72px;
             }}
             QTabBar::tab {{
                 background: {self._theme.bg_secondary};
                 color: {self._theme.text_secondary};
-                padding: 14px 40px;
-                min-width: 280px;
+                min-height: 50px;
+                padding: 6px 40px;
                 margin-right: 4px;
                 border-top-left-radius: {self._theme.radius_md};
                 border-top-right-radius: {self._theme.radius_md};
-                font-size: {self._theme.font_md};
+                font-size: 36px;
                 font-weight: 600;
             }}
             QTabBar::tab:selected {{
@@ -811,23 +871,124 @@ class MainWindow(QMainWindow):
                 color: {self._theme.text_primary};
             }}
         """)
+        tab_bar = self.tabs.tabBar()
+        tab_bar.setExpanding(True)
+        tab_bar.setElideMode(Qt.ElideNone)
+        tab_bar.setMinimumHeight(64)
+        tab_bar.setMaximumHeight(72)
 
-        # Tabs
-        tabs = QTabWidget()
-        tabs.tabBar().setExpanding(True)
         self.extraction_tab = FeatureExtractionTab(
             model_dir=self.model_dir, theme=self._theme
         )
         self.retrieval_tab = RetrievalTab(
             model_dir=self.model_dir, theme=self._theme
         )
-        tabs.addTab(self.extraction_tab, "Feature Extraction")
-        tabs.addTab(self.retrieval_tab, "Image Retrieval")
-        self.setCentralWidget(tabs)
+        self.tabs.addTab(self.extraction_tab, "")
+        self.tabs.addTab(self.retrieval_tab, "")
+
+        # ── Language button (corner widget — shares tab parent boundaries) ──
+        cur = "EN" if self._lang == "en" else "中文"
+        self.lang_btn = QPushButton(cur)
+        self.lang_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {self._theme.bg_secondary};
+                color: {self._theme.accent};
+                border: 1px solid {self._theme.border};
+                border-radius: {self._theme.radius_md};
+                padding: 16px 28px;
+                font-size: 28px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{
+                background: {self._theme.accent_light};
+                border-color: {self._theme.accent};
+            }}
+        """)
+        self.lang_btn.clicked.connect(self._toggle_language)
+        self.lang_btn.setToolTip(
+            "Switch to 中文" if self._lang == "en" else "Switch to English"
+        )
+        # Use corner widget — right edge of button = right edge of tab content
+        self.tabs.setCornerWidget(self.lang_btn, Qt.TopRightCorner)
+
+        # ── Layout ──
+        central = QWidget()
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.tabs)
+        self.setCentralWidget(central)
+
+        # ── Tab text ──
+        self._update_tab_text()
+        # Dynamic tab width after text is set
+        self._resize_tabs()
+
+    # ── Tab sizing ──
+
+    def _resize_tabs(self):
+        """Double the tab button width for readability."""
+        bar = self.tabs.tabBar()
+        fm = QFontMetrics(bar.font())
+        max_w = 0
+        for i in range(bar.count()):
+            text = bar.tabText(i)
+            w = fm.horizontalAdvance(text)
+            if any('一' <= c <= '鿿' for c in text):
+                w = int(w * 1.15)
+            max_w = max(max_w, w)
+        # Width: (text + 40px padding) * 2 * 1.1 per tab
+        min_full = int((max_w + 40) * 2 * 1.1)
+        bar.setMinimumWidth(min_full * bar.count())
+
+    # ── Language toggle ──
+
+    def _toggle_language(self):
+        """Toggle between English and Chinese."""
+        self._lang = toggle_lang(self._lang)
+        self.setWindowTitle(t("window_title", self._lang))
+
+        # Button: show only current language
+        cur = "EN" if self._lang == "en" else "中文"
+        tip = "Switch to 中文" if self._lang == "en" else "Switch to English"
+        self.lang_btn.setText(cur)
+        self.lang_btn.setToolTip(tip)
+
+        # Tab bar font: English +1pt
+        bar = self.tabs.tabBar()
+        f = bar.font()
+        f.setPointSize(f.pointSize() if self._lang == "en" else f.pointSize() - 1)
+        if self._lang == "en":
+            f.setPointSize(f.pointSize() + 1)
+        bar.setFont(f)
+
+        # Propagate to tabs
+        self.extraction_tab._lang = self._lang
+        self.retrieval_tab._lang = self._lang
+        self.extraction_tab.retranslate_ui()
+        self.retrieval_tab.retranslate_ui()
+        self._update_tab_text()
+        self._resize_tabs()
+
+    def _update_tab_text(self):
+        """Refresh tab labels."""
+        self.tabs.setTabText(0, t("tab_extraction", self._lang))
+        self.tabs.setTabText(1, t("tab_retrieval", self._lang))
 
     @staticmethod
     def _resolve_model_dir() -> str:
         try:
+            home = Path.home()
+            d = home / '.vit_image_retrieval' / 'models'
+            d.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Model directory: {d}")
+            return str(d)
+        except Exception:
+            import tempfile
+            d = Path(tempfile.gettempdir()) / '.vit_image_retrieval' / 'models'
+            d.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Model directory (fallback): {d}")
+            return str(d)
             home = Path.home()
             d = home / '.vit_image_retrieval' / 'models'
             d.mkdir(parents=True, exist_ok=True)

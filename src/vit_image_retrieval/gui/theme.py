@@ -46,6 +46,9 @@ class Theme:
     padding_md: str = "16px"
     padding_lg: str = "24px"
 
+    # ── i18n ──
+    language: str = "en"
+
     # ── Misc ──
     radius_sm: str = "6px"
     radius_md: str = "10px"
