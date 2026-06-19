@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QFrame,
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QFontMetrics
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QFontMetrics, QPixmap
 from PyQt5.QtWidgets import QShortcut
 
 from vit_image_retrieval.core.feature_extractor import ImageFeatureExtractor
@@ -410,8 +410,8 @@ class RetrievalTab(QWidget):
         self.q_title.setText(t("rt_query_section", lang))
         qt = self.query_image_path
         if qt:
-            self.drop_target.setText(t("rt_selected", lang, name=os.path.basename(qt)))
             self.query_label.setText(os.path.basename(qt))
+            # drop_target keeps its pixmap (thumbnail), do not overwrite with text
         else:
             self.drop_target.setText(t("rt_drop_hint", lang))
             self.query_label.setText(t("rt_no_query", lang))
@@ -609,18 +609,33 @@ class RetrievalTab(QWidget):
     def _set_query_image(self, path: str):
         self.query_image_path = path
         self.query_label.setText(os.path.basename(path))
-        self.drop_target.setText(t("rt_selected", self._lang, name=os.path.basename(path)))
-        self.drop_target.setStyleSheet(f"""
-            QLabel {{
-                background: {self._theme.success_light};
-                border: 2px solid {self._theme.success};
-                border-radius: {self._theme.radius_md};
-                padding: {self._theme.padding_lg};
-                font-size: {self._theme.font_sm};
-                color: {self._theme.success};
-                font-weight: 600;
-            }}
-        """)
+
+        # Show thumbnail in drop target area
+        pix = QPixmap(path)
+        if not pix.isNull():
+            scaled = pix.scaled(200, 140, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.drop_target.setPixmap(scaled)
+            self.drop_target.setStyleSheet(f"""
+                QLabel {{
+                    background: {self._theme.bg_primary};
+                    border: 2px solid {self._theme.success};
+                    border-radius: {self._theme.radius_md};
+                    padding: {self._theme.padding_xs};
+                }}
+            """)
+        else:
+            self.drop_target.setText(t("rt_selected", self._lang, name=os.path.basename(path)))
+            self.drop_target.setStyleSheet(f"""
+                QLabel {{
+                    background: {self._theme.success_light};
+                    border: 2px solid {self._theme.success};
+                    border-radius: {self._theme.radius_md};
+                    padding: {self._theme.padding_lg};
+                    font-size: {self._theme.font_sm};
+                    color: {self._theme.success};
+                    font-weight: 600;
+                }}
+            """)
         if self.retrieval_system:
             self.search_btn.setEnabled(True)
             self.search_btn.setStyleSheet(self._theme.primary_btn())
@@ -838,7 +853,7 @@ class MainWindow(QMainWindow):
         self.model_dir = self._resolve_model_dir()
 
         self.setWindowTitle(t("window_title", self._lang))
-        self.setMinimumSize(900, 650)
+        self.setMinimumSize(990, 715)
 
         # ── Tab widget ──
         self.tabs = QTabWidget()
